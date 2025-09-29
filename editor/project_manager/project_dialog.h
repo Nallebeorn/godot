@@ -99,21 +99,29 @@ private:
 	AcceptDialog *dialog_error = nullptr;
 
 	AcceptDialog *progress_dialog = nullptr;
+	Label *progress_label = nullptr;
 	struct ProgressData {
 		Thread thread;
 
-		SafeFlag is_processing;
-		Error error;
+		Mode mode;
+		SafeFlag done;
 		String source_path;
 		String target_path;
+		bool create_dir = false;
+
+		String error_popup;
+		String error_inline;
+		bool succeeded;
 
 		Mutex mutex;
 		String current_file;
 	};
 	ProgressData *progress_data = nullptr;
 
-	static void _copy_thread(void *p_progress_data);
-	void _copy_finished();
+	static void _run_thread(void *p_progress_data);
+	static void _duplicate_threaded(ProgressData *p_progress_data);
+	static void _import_threaded(ProgressData *p_progress_data);
+	void _thread_done();
 
 	String zip_path;
 	String zip_title;
@@ -154,6 +162,7 @@ private:
 	void _nonempty_confirmation_ok_pressed();
 
 	void _update_name_in_project_file(String p_project_path);
+	void _project_created(String path);
 
 	void ok_pressed() override;
 
