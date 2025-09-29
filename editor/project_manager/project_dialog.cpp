@@ -44,6 +44,7 @@
 #include "scene/gui/check_button.h"
 #include "scene/gui/line_edit.h"
 #include "scene/gui/option_button.h"
+#include "scene/gui/progress_bar.h"
 #include "scene/gui/separator.h"
 #include "scene/gui/texture_rect.h"
 
@@ -491,6 +492,62 @@ void ProjectDialog::_nonempty_confirmation_ok_pressed() {
 	ok_pressed();
 }
 
+void ProjectDialog::_update_name_in_project_file(String p_project_path) {
+	ConfigFile cfg;
+	String project_godot = p_project_path.path_join("project.godot");
+	Error err = cfg.load(project_godot);
+	if (err != OK) {
+		dialog_error->set_text(vformat(TTR("Couldn't load project at '%s' (error %d). It may be missing or corrupted."), project_godot, err));
+		dialog_error->popup_centered();
+		return;
+	}
+	cfg.set_value("application", "config/name", project_name->get_text().strip_edges());
+	err = cfg.save(project_godot);
+	if (err != OK) {
+		dialog_error->set_text(vformat(TTR("Couldn't save project at '%s' (error %d)."), project_godot, err));
+		dialog_error->popup_centered();
+		return;
+	}
+}
+
+void ProjectDialog::_copy_thread(void *p_progress_data) {
+	ProgressData *data = static_cast<ProgressData *>(p_progress_data);
+	Ref<DirAccess> dir = DirAccess::open(data->source_path);
+	if (dir.is_valid()) {
+		data->error = dir->copy_dir(".", data->target_path, -1, true);
+	}
+
+	data->is_processing.clear();
+}
+
+void ProjectDialog::_copy_finished() {
+	progress_data->is_processing.clear();
+
+	progress_data->thread.wait_to_finish();
+
+	if (progress_dialog) {
+		progress_dialog->hide();
+	}
+
+	if (progress_data->error == OK) {
+		hide();
+
+		if (mode == MODE_DUPLICATE) {
+			emit_signal(SNAME("project_duplicated"), progress_data->source_path, progress_data->target_path, edit_check_box->is_visible() && edit_check_box->is_pressed());
+		}
+
+		_update_name_in_project_file(progress_data->target_path);
+	} else {
+		if (mode == MODE_DUPLICATE) {
+			dialog_error->set_text(vformat(TTR("Couldn't duplicate project (error %d)."), error_names[progress_data->error]));
+		}
+		dialog_error->popup_centered();
+	}
+
+	memdelete(progress_data);
+	progress_data = nullptr;
+}
+
 void ProjectDialog::ok_pressed() {
 	// Before we create a project, check that the target folder is empty.
 	// If not, we need to ask the user if they're sure they want to do this.
@@ -705,38 +762,53 @@ void ProjectDialog::ok_pressed() {
 	}
 
 	if (mode == MODE_DUPLICATE) {
-		Ref<DirAccess> dir = DirAccess::open(original_project_path);
-		Error err = FAILED;
-		if (dir.is_valid()) {
-			err = dir->copy_dir(".", path, -1, true);
+		if (!progress_dialog && is_inside_tree()) {
+			progress_dialog = memnew(AcceptDialog);
+			progress_dialog->set_title(TTRC("Duplicating project"));
+			progress_dialog->set_ok_button_text(TTRC("Cancel"));
+
+			VBoxContainer *vb = memnew(VBoxContainer);
+			progress_dialog->add_child(vb);
+
+			Label *label = memnew(Label);
+			label->set_text(TTRC("Duplicating project..."));
+			vb->add_child(label);
+
+			ProgressBar *progress = memnew(ProgressBar);
+			progress->set_indeterminate(true);
+			vb->add_child(progress);
+
+			add_child(progress_dialog);
+			progress_dialog->connect(SceneStringName(confirmed), callable_mp(this, &ProjectDialog::_copy_finished));
+			progress_dialog->connect("canceled", callable_mp(this, &ProjectDialog::_copy_finished));
 		}
-		if (err != OK) {
-			dialog_error->set_text(vformat(TTR("Couldn't duplicate project (error %d)."), err));
-			dialog_error->popup_centered();
-			return;
+
+		ERR_FAIL_COND_MSG(progress_data != nullptr, "Duplication operation already in progress.");
+
+		progress_data = memnew(ProgressData);
+		progress_data->source_path = original_project_path;
+		progress_data->target_path = path;
+		progress_data->is_processing.set();
+		progress_data->error = FAILED;
+
+		progress_data->thread.start(_copy_thread, progress_data);
+
+		if (progress_dialog) {
+			progress_dialog->reset_size();
+			progress_dialog->popup_centered();
 		}
+
+		set_process(true);
 	}
 
-	if (mode == MODE_RENAME || mode == MODE_INSTALL || mode == MODE_DUPLICATE) {
-		// Load project.godot as ConfigFile to set the new name.
-		ConfigFile cfg;
-		String project_godot = path.path_join("project.godot");
-		Error err = cfg.load(project_godot);
-		if (err != OK) {
-			dialog_error->set_text(vformat(TTR("Couldn't load project at '%s' (error %d). It may be missing or corrupted."), project_godot, err));
-			dialog_error->popup_centered();
-			return;
-		}
-		cfg.set_value("application", "config/name", project_name->get_text().strip_edges());
-		err = cfg.save(project_godot);
-		if (err != OK) {
-			dialog_error->set_text(vformat(TTR("Couldn't save project at '%s' (error %d)."), project_godot, err));
-			dialog_error->popup_centered();
-			return;
-		}
+	if (mode == MODE_RENAME || mode == MODE_INSTALL) {
+		_update_name_in_project_file(path);
 	}
 
-	hide();
+	if (progress_data == nullptr) {
+		hide();
+	}
+
 	if (mode == MODE_NEW || mode == MODE_IMPORT || mode == MODE_INSTALL) {
 #ifdef ANDROID_ENABLED
 		// Create a .nomedia file to hide assets from media apps on Android.
@@ -755,8 +827,6 @@ void ProjectDialog::ok_pressed() {
 		}
 #endif
 		emit_signal(SNAME("project_created"), path, edit_check_box->is_pressed());
-	} else if (mode == MODE_DUPLICATE) {
-		emit_signal(SNAME("project_duplicated"), original_project_path, path, edit_check_box->is_visible() && edit_check_box->is_pressed());
 	} else if (mode == MODE_RENAME) {
 		emit_signal(SNAME("projects_updated"));
 	}
@@ -946,6 +1016,15 @@ void ProjectDialog::_notification(int p_what) {
 			fdialog_project->connect("canceled", callable_mp(this, &ProjectDialog::show_dialog).bind(false), CONNECT_DEFERRED);
 			callable_mp((Node *)this, &Node::add_sibling).call_deferred(fdialog_project, false);
 		} break;
+		case NOTIFICATION_PROCESS: {
+			if (progress_data && !progress_data->is_processing.is_set()) {
+				set_process(false);
+
+				if (mode == MODE_DUPLICATE) {
+					_copy_finished();
+				}
+			}
+		}
 	}
 }
 

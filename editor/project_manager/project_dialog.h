@@ -98,6 +98,23 @@ private:
 	EditorFileDialog *fdialog_install = nullptr;
 	AcceptDialog *dialog_error = nullptr;
 
+	AcceptDialog *progress_dialog = nullptr;
+	struct ProgressData {
+		Thread thread;
+
+		SafeFlag is_processing;
+		Error error;
+		String source_path;
+		String target_path;
+
+		Mutex mutex;
+		String current_file;
+	};
+	ProgressData *progress_data = nullptr;
+
+	static void _copy_thread(void *p_progress_data);
+	void _copy_finished();
+
 	String zip_path;
 	String zip_title;
 
@@ -135,6 +152,8 @@ private:
 	void _reset_name();
 	void _renderer_selected();
 	void _nonempty_confirmation_ok_pressed();
+
+	void _update_name_in_project_file(String p_project_path);
 
 	void ok_pressed() override;
 
