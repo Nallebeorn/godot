@@ -39,6 +39,7 @@ class EditorFileDialog;
 class LineEdit;
 class OptionButton;
 class TextureRect;
+class ProgressBar;
 
 class ProjectDialog : public ConfirmationDialog {
 	GDCLASS(ProjectDialog, ConfirmationDialog);
@@ -100,6 +101,7 @@ private:
 
 	AcceptDialog *progress_dialog = nullptr;
 	Label *progress_label = nullptr;
+	ProgressBar *progress_bar = nullptr;
 	struct ProgressData {
 		Thread thread;
 
@@ -112,6 +114,8 @@ private:
 		String error_popup;
 		String error_inline;
 		bool succeeded;
+		SafeNumeric<size_t> total_files;
+		SafeNumeric<size_t> processed_files;
 
 		Mutex mutex;
 		String current_file;

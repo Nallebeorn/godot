@@ -588,6 +588,10 @@ void ProjectDialog::_import_threaded(ProgressData *p_data) {
 		}
 	}
 
+	unz_global_info zip_info;
+	unzGetGlobalInfo(pkg, &zip_info);
+	p_data->total_files.set(zip_info.number_entry);
+
 	ret = unzGoToFirstFile(pkg);
 
 	Vector<String> failed_files;
@@ -596,6 +600,8 @@ void ProjectDialog::_import_threaded(ProgressData *p_data) {
 			unzClose(pkg);
 			return;
 		}
+
+		p_data->processed_files.increment();
 
 		//get filename
 		unz_file_info info;
@@ -612,6 +618,7 @@ void ProjectDialog::_import_threaded(ProgressData *p_data) {
 		}
 
 		String rel_path = name.trim_prefix(zip_root);
+		p_data->current_file = rel_path;
 		if (rel_path.is_empty()) { // Root.
 		} else if (rel_path.ends_with("/")) { // Directory.
 			Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_FILESYSTEM);
@@ -801,16 +808,18 @@ void ProjectDialog::ok_pressed() {
 		if (!progress_dialog && is_inside_tree()) {
 			progress_dialog = memnew(AcceptDialog);
 			progress_dialog->set_ok_button_text(TTRC("Cancel"));
+			progress_dialog->set_min_size(Vector2(400, 0) * EDSCALE);
 
 			VBoxContainer *vb = memnew(VBoxContainer);
 			progress_dialog->add_child(vb);
 
-			progress_label = memnew(Label);
-			vb->add_child(progress_label);
+			progress_bar = memnew(ProgressBar);
+			progress_bar->set_indeterminate(true);
+			vb->add_child(progress_bar);
 
-			ProgressBar *progress = memnew(ProgressBar);
-			progress->set_indeterminate(true);
-			vb->add_child(progress);
+			progress_label = memnew(Label);
+			progress_label->set_clip_text(true);
+			vb->add_child(progress_label);
 
 			add_child(progress_dialog);
 			progress_dialog->connect(SceneStringName(confirmed), callable_mp(this, &ProjectDialog::_thread_done));
@@ -823,6 +832,8 @@ void ProjectDialog::ok_pressed() {
 		progress_data->done.clear();
 		progress_data->succeeded = false;
 		progress_data->mode = mode;
+		progress_data->total_files.set(0);
+		progress_data->processed_files.set(0);
 
 		if (mode == MODE_IMPORT) {
 			progress_dialog->set_title(TTRC("Importing project"));
@@ -1053,9 +1064,19 @@ void ProjectDialog::_notification(int p_what) {
 			callable_mp((Node *)this, &Node::add_sibling).call_deferred(fdialog_project, false);
 		} break;
 		case NOTIFICATION_PROCESS: {
-			if (progress_data && progress_data->done.is_set()) {
-				set_process(false);
-				_thread_done();
+			if (progress_data) {
+				if (progress_data->done.is_set()) {
+					set_process(false);
+					_thread_done();
+				} else {
+					size_t total_files = progress_data->total_files.get();
+					size_t processed_files = progress_data->processed_files.get();
+					progress_bar->set_indeterminate(total_files == 0);
+					progress_bar->set_max(total_files);
+					progress_bar->set_value(processed_files);
+					// progress_label->set_text(vformat("%d/%d %s", processed_files, total_files, progress_data->current_file));
+					progress_label->set_text(progress_data->current_file);
+				}
 			}
 		}
 	}
