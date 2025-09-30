@@ -34,6 +34,7 @@
 #include "core/io/dir_access.h"
 #include "core/io/zip_io.h"
 #include "core/version.h"
+#include "editor/editor_node.h"
 #include "editor/editor_string_names.h"
 #include "editor/gui/editor_file_dialog.h"
 #include "editor/settings/editor_settings.h"
@@ -596,11 +597,6 @@ void ProjectDialog::_import_threaded(ProgressData *p_data) {
 
 	Vector<String> failed_files;
 	while (ret == UNZ_OK) {
-		if (p_data->done.is_set()) { // Canceled
-			unzClose(pkg);
-			return;
-		}
-
 		p_data->processed_files.increment();
 
 		//get filename
@@ -663,8 +659,6 @@ void ProjectDialog::_import_threaded(ProgressData *p_data) {
 }
 
 void ProjectDialog::_thread_done() {
-	progress_data->done.set();
-
 	progress_data->thread.wait_to_finish();
 
 	if (progress_dialog) {
@@ -805,25 +799,27 @@ void ProjectDialog::ok_pressed() {
 	}
 
 	if (mode == MODE_IMPORT || mode == MODE_INSTALL || mode == MODE_DUPLICATE) {
-		if (!progress_dialog && is_inside_tree()) {
-			progress_dialog = memnew(AcceptDialog);
-			progress_dialog->set_ok_button_text(TTRC("Cancel"));
+		if (!progress_dialog) {
+			progress_dialog = memnew(PopupPanel);
+			progress_dialog->set_exclusive(true);
+			progress_dialog->set_flag(FLAG_POPUP, false);
 			progress_dialog->set_min_size(Vector2(400, 0) * EDSCALE);
 
 			VBoxContainer *vb = memnew(VBoxContainer);
 			progress_dialog->add_child(vb);
 
+			progress_title = memnew(Label);
+			progress_title->set_theme_type_variation("HeaderSmall");
+			vb->add_child(progress_title);
+
 			progress_bar = memnew(ProgressBar);
-			progress_bar->set_indeterminate(true);
 			vb->add_child(progress_bar);
 
-			progress_label = memnew(Label);
-			progress_label->set_clip_text(true);
-			vb->add_child(progress_label);
+			progress_state = memnew(Label);
+			progress_state->set_clip_text(true);
+			vb->add_child(progress_state);
 
 			add_child(progress_dialog);
-			progress_dialog->connect(SceneStringName(confirmed), callable_mp(this, &ProjectDialog::_thread_done));
-			progress_dialog->connect("canceled", callable_mp(this, &ProjectDialog::_thread_done));
 		}
 
 		ERR_FAIL_COND_MSG(progress_data != nullptr, "Previous threaded operation hasn't finished.");
@@ -836,30 +832,25 @@ void ProjectDialog::ok_pressed() {
 		progress_data->processed_files.set(0);
 
 		if (mode == MODE_IMPORT) {
-			progress_dialog->set_title(TTRC("Importing project"));
-			progress_label->set_text(TTRC("Importing project..."));
+			progress_title->set_text(TTRC("Importing project"));
 			progress_data->source_path = zip_path;
 			progress_data->target_path = install_path->get_text().simplify_path();
 			progress_data->create_dir = create_dir->is_pressed();
 		} else if (mode == MODE_INSTALL) {
-			progress_dialog->set_title(TTRC("Installing project"));
-			progress_label->set_text(TTRC("Installing project..."));
+			progress_title->set_text(TTRC("Installing project"));
 			progress_data->source_path = zip_path;
 			progress_data->target_path = path;
 			progress_data->create_dir = create_dir->is_pressed();
 		} else if (mode == MODE_DUPLICATE) {
-			progress_dialog->set_title(TTRC("Duplicating"));
-			progress_label->set_text(TTRC("Duplicating project..."));
+			progress_title->set_text(TTRC("Duplicating project"));
 			progress_data->source_path = original_project_path;
 			progress_data->target_path = path;
 		}
 
 		progress_data->thread.start(_run_thread, progress_data);
 
-		if (progress_dialog) {
-			progress_dialog->reset_size();
-			progress_dialog->popup_centered();
-		}
+		progress_dialog->reset_size();
+		progress_dialog->popup_centered();
 
 		set_process(true);
 
@@ -1071,11 +1062,15 @@ void ProjectDialog::_notification(int p_what) {
 				} else {
 					size_t total_files = progress_data->total_files.get();
 					size_t processed_files = progress_data->processed_files.get();
-					progress_bar->set_indeterminate(total_files == 0);
-					progress_bar->set_max(total_files);
-					progress_bar->set_value(processed_files);
-					// progress_label->set_text(vformat("%d/%d %s", processed_files, total_files, progress_data->current_file));
-					progress_label->set_text(progress_data->current_file);
+					if (total_files > 0) {
+						progress_bar->set_indeterminate(false);
+						progress_bar->set_max(total_files);
+						progress_bar->set_value(processed_files);
+						progress_state->set_text(progress_data->current_file);
+					} else {
+						progress_bar->set_indeterminate(true);
+						progress_state->set_text(TTRC("Finding files..."));
+					}
 				}
 			}
 		}

@@ -99,8 +99,9 @@ private:
 	EditorFileDialog *fdialog_install = nullptr;
 	AcceptDialog *dialog_error = nullptr;
 
-	AcceptDialog *progress_dialog = nullptr;
-	Label *progress_label = nullptr;
+	Popup *progress_dialog = nullptr;
+	Label *progress_title = nullptr;
+	Label *progress_state = nullptr;
 	ProgressBar *progress_bar = nullptr;
 	struct ProgressData {
 		Thread thread;
