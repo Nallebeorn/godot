@@ -526,14 +526,64 @@ void ProjectDialog::_run_thread(void *p_progress_data) {
 }
 
 void ProjectDialog::_duplicate_threaded(ProgressData *p_data) {
-	Ref<DirAccess> dir = DirAccess::open(p_data->source_path);
-	Error err = FAILED;
-	if (dir.is_valid()) {
-		err = dir->copy_dir(".", p_data->target_path, -1, true);
+	LocalVector<String> files;
+	LocalVector<String> dirs;
+	String from_path = p_data->source_path;
+	String to_path = p_data->target_path;
+
+	Error err = OK;
+	Ref<DirAccess> da = DirAccess::open(from_path);
+	if (!da.is_valid()) {
+		err = DirAccess::get_open_error();
+	} else {
+		dirs.push_back("");
+	}
+
+	for (size_t i = 0; i < dirs.size(); i++) {
+		String rel_path = dirs[i];
+		da->change_dir(from_path.path_join(rel_path));
+		da->list_dir_begin();
+
+		String target_dir = to_path.path_join(rel_path);
+		if (!da->dir_exists(target_dir)) {
+			err = da->make_dir(target_dir);
+			ERR_BREAK_MSG(err != OK, vformat("Failed making directory '%s'.", target_dir));
+		}
+
+		for (String entry = da->get_next(); !entry.is_empty(); entry = da->get_next()) {
+			if (entry == "." || entry == "..") {
+				continue;
+			}
+
+			if (da->current_is_dir() && !da->is_link(entry)) {
+				dirs.push_back(rel_path.path_join(entry));
+			} else {
+				files.push_back(rel_path.path_join(entry));
+			}
+		}
+		da->list_dir_end();
+	}
+
+	p_data->total_files.set(files.size());
+
+	for (size_t i = 0; i < files.size(); i++) {
+		String file = files[i];
+		p_data->current_file = file;
+		p_data->processed_files.increment();
+
+		String from = from_path.path_join(file);
+		String to = to_path.path_join(file);
+		if (da->is_link(from)) {
+			err = da->create_link(da->read_link(from), to);
+			ERR_BREAK_MSG(err != OK, vformat("Error creating link %s: %s", file, error_names[err]));
+		} else {
+			err = da->copy(from_path.path_join(file), to_path.path_join(file));
+			ERR_BREAK_MSG(err != OK, vformat("Error copying file %s: %s", file, error_names[err]));
+		}
 	}
 
 	if (err != OK) {
-		p_data->error_popup = vformat(TTR("Couldn't duplicate project (error %d)."), error_names[err]);
+		p_data->error_popup = vformat(TTR("Couldn't duplicate project (%s)."), error_names[err]);
 		return;
 	}
 
@@ -816,7 +866,7 @@ void ProjectDialog::ok_pressed() {
 			vb->add_child(progress_bar);
 
 			progress_state = memnew(Label);
-			progress_state->set_clip_text(true);
+			progress_state->set_text_overrun_behavior(TextServer::OVERRUN_TRIM_ELLIPSIS);
 			vb->add_child(progress_state);
 
 			add_child(progress_dialog);
