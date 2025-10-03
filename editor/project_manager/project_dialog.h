@@ -38,6 +38,7 @@ class CheckButton;
 class EditorFileDialog;
 class LineEdit;
 class OptionButton;
+class ProjectProgressDialog;
 class TextureRect;
 
 class ProjectDialog : public ConfirmationDialog {
@@ -97,6 +98,7 @@ private:
 	EditorFileDialog *fdialog_project = nullptr;
 	EditorFileDialog *fdialog_install = nullptr;
 	AcceptDialog *dialog_error = nullptr;
+	ProjectProgressDialog *progress_dialog = nullptr;
 
 	String zip_path;
 	String zip_title;
@@ -135,6 +137,8 @@ private:
 	void _reset_name();
 	void _renderer_selected();
 	void _nonempty_confirmation_ok_pressed();
+
+	Error _copy_dir_with_progress(String from_dir, String to_dir);
 
 	void ok_pressed() override;
 

@@ -37,6 +37,7 @@
 #include "editor/editor_node.h"
 #include "editor/editor_string_names.h"
 #include "editor/gui/editor_file_dialog.h"
+#include "editor/project_manager/project_progress_dialog.h"
 #include "editor/settings/editor_settings.h"
 #include "editor/themes/editor_icons.h"
 #include "editor/themes/editor_scale.h"
@@ -522,6 +523,62 @@ void ProjectDialog::_nonempty_confirmation_ok_pressed() {
 	ok_pressed();
 }
 
+Error ProjectDialog::_copy_dir_with_progress(String from_dir, String to_dir) {
+	LocalVector<String> files;
+	LocalVector<String> dirs;
+
+	Ref<DirAccess> da = DirAccess::open(from_dir);
+	ERR_FAIL_COND_V_MSG(!da.is_valid(), DirAccess::get_open_error(), "Failed to open source directory.");
+	dirs.push_back("");
+
+	for (size_t i = 0; i < dirs.size(); i++) {
+		progress_dialog->step();
+
+		String rel_path = dirs[i];
+		da->change_dir(from_dir.path_join(rel_path));
+		da->list_dir_begin();
+
+		String target_dir = to_dir.path_join(rel_path);
+		if (!da->dir_exists(target_dir)) {
+			Error err = da->make_dir(target_dir);
+			ERR_FAIL_COND_V_MSG(err != OK, err, vformat("Failed making directory '%s'.", target_dir));
+		}
+
+		for (String entry = da->get_next(); !entry.is_empty(); entry = da->get_next()) {
+			if (entry == "." || entry == "..") {
+				continue;
+			}
+
+			if (da->current_is_dir() && !da->is_link(entry)) {
+				dirs.push_back(rel_path.path_join(entry));
+			} else {
+				files.push_back(rel_path.path_join(entry));
+			}
+		}
+		da->list_dir_end();
+	}
+
+	progress_dialog->set_total_files(files.size());
+
+	for (size_t i = 0; i < files.size(); i++) {
+		String file = files[i];
+		progress_dialog->set_current_file(file);
+		progress_dialog->step();
+
+		String from = from_dir.path_join(file);
+		String to = to_dir.path_join(file);
+		if (da->is_link(from)) {
+			Error err = da->create_link(da->read_link(from), to);
+			ERR_FAIL_COND_V_MSG(err != OK, err, vformat("Error copying link %s: %s.", file, error_names[err]));
+		} else {
+			Error err = da->copy(from_dir.path_join(file), to_dir.path_join(file));
+			ERR_FAIL_COND_V_MSG(err != OK, err, vformat("Error copying file %s: %s.", file, error_names[err]));
+		}
+	}
+
+	return OK;
+}
+
 void ProjectDialog::ok_pressed() {
 	// Before we create a project, check that the target folder is empty.
 	// If not, we need to ask the user if they're sure they want to do this.
@@ -676,15 +733,22 @@ void ProjectDialog::ok_pressed() {
 				}
 			}
 
+			unz_global_info zip_info;
+			unzGetGlobalInfo(pkg, &zip_info);
+			progress_dialog->show_dialog(mode == MODE_INSTALL ? TTR("Installing project") : TTR("Importing project"));
+			progress_dialog->set_total_files(zip_info.number_entry);
+
 			ret = unzGoToFirstFile(pkg);
 
 			Vector<String> failed_files;
 			while (ret == UNZ_OK) {
+				progress_dialog->step();
+
 				//get filename
 				unz_file_info info;
 				char fname[16384];
 				ret = unzGetCurrentFileInfo(pkg, &info, fname, 16384, nullptr, 0, nullptr, 0);
-				ERR_FAIL_COND_MSG(ret != UNZ_OK, "Failed to get current file info.");
+				ERR_BREAK_MSG(ret != UNZ_OK, "Failed to get current file info.");
 
 				String name = String::utf8(fname);
 
@@ -695,6 +759,7 @@ void ProjectDialog::ok_pressed() {
 				}
 
 				String rel_path = name.trim_prefix(zip_root);
+				progress_dialog->set_current_file(rel_path);
 				if (rel_path.is_empty()) { // Root.
 				} else if (rel_path.ends_with("/")) { // Directory.
 					Ref<DirAccess> da = DirAccess::create(DirAccess::ACCESS_FILESYSTEM);
@@ -721,6 +786,8 @@ void ProjectDialog::ok_pressed() {
 
 			unzClose(pkg);
 
+			progress_dialog->hide();
+
 			if (failed_files.size()) {
 				String err_msg = TTR("The following files failed extraction from package:") + "\n\n";
 				for (int i = 0; i < failed_files.size(); i++) {
@@ -741,11 +808,10 @@ void ProjectDialog::ok_pressed() {
 	}
 
 	if (mode == MODE_DUPLICATE) {
-		Ref<DirAccess> dir = DirAccess::open(original_project_path);
-		Error err = FAILED;
-		if (dir.is_valid()) {
-			err = dir->copy_dir(".", path, -1, true);
-		}
+		progress_dialog->show_dialog("Duplicating project...");
+		Error err = _copy_dir_with_progress(original_project_path, path);
+		progress_dialog->hide();
+
 		if (err != OK) {
 			dialog_error->set_text(vformat(TTR("Couldn't duplicate project (error %d)."), err));
 			dialog_error->popup_centered();
@@ -1219,4 +1285,7 @@ ProjectDialog::ProjectDialog() {
 
 	dialog_error = memnew(AcceptDialog);
 	add_child(dialog_error);
+
+	progress_dialog = memnew(ProjectProgressDialog);
+	add_child(progress_dialog);
 }
