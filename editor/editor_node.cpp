@@ -5358,7 +5358,7 @@ void EditorNode::notify_all_debug_sessions_exited() {
 void EditorNode::add_io_error(const String &p_error) {
 	DEV_ASSERT(Thread::get_caller_id() == Thread::get_main_id());
 	singleton->load_errors->add_image(singleton->theme->get_icon(SNAME("Error"), EditorStringName(EditorIcons)));
-	singleton->load_errors->add_text(p_error + "\n");
+	singleton->load_errors->add_text(" " + p_error + "\n");
 	// When a progress dialog is displayed, we will wait for it ot close before displaying
 	// the io errors to prevent the io popup to set it's parent to the progress dialog.
 	if (singleton->progress_dialog->is_visible()) {
@@ -5371,7 +5371,7 @@ void EditorNode::add_io_error(const String &p_error) {
 void EditorNode::add_io_warning(const String &p_warning) {
 	DEV_ASSERT(Thread::get_caller_id() == Thread::get_main_id());
 	singleton->load_errors->add_image(singleton->theme->get_icon(SNAME("Warning"), EditorStringName(EditorIcons)));
-	singleton->load_errors->add_text(p_warning + "\n");
+	singleton->load_errors->add_text(" " + p_warning + "\n");
 	// When a progress dialog is displayed, we will wait for it ot close before displaying
 	// the io errors to prevent the io popup to set it's parent to the progress dialog.
 	if (singleton->progress_dialog->is_visible()) {
@@ -9213,6 +9213,7 @@ EditorNode::EditorNode() {
 	set_process_shortcut_input(true);
 
 	load_errors = memnew(RichTextLabel);
+	load_errors->set_selection_enabled(true);
 	load_error_dialog = memnew(AcceptDialog);
 	load_error_dialog->set_unparent_when_invisible(true);
 	load_error_dialog->add_child(load_errors);
