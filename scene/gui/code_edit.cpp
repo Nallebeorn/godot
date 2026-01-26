@@ -2304,6 +2304,19 @@ void CodeEdit::add_code_completion_option(CodeCompletionKind p_type, const Strin
 	code_completion_option_submitted.push_back(completion_option);
 }
 
+void CodeEdit::add_code_completion_option_text_edit(CodeCompletionKind p_type, const String &p_display_text, const String &p_text_edit, const Pair<int, int> &p_text_edit_range, const Color &p_text_color, const Ref<Resource> &p_icon, const Variant &p_value, int p_location) {
+	ScriptLanguage::CodeCompletionOption completion_option;
+	completion_option.kind = (ScriptLanguage::CodeCompletionKind)p_type;
+	completion_option.display = p_display_text;
+	completion_option.text_edit = p_text_edit;
+	completion_option.text_edit_range = p_text_edit_range;
+	completion_option.font_color = p_text_color;
+	completion_option.icon = p_icon;
+	completion_option.default_value = p_value;
+	completion_option.location = p_location;
+	code_completion_option_submitted.push_back(completion_option);
+}
+
 void CodeEdit::update_code_completion_options(bool p_forced) {
 	code_completion_forced = p_forced;
 	code_completion_option_sources = code_completion_option_submitted;
@@ -2384,93 +2397,137 @@ void CodeEdit::confirm_code_completion(bool p_replace) {
 		int caret_line = get_caret_line(i);
 
 		const String &insert_text = code_completion_options[code_completion_current_selected].insert_text;
+		const String &text_edit = code_completion_options[code_completion_current_selected].text_edit;
+		const Pair<int, int> &text_edit_range = code_completion_options[code_completion_current_selected].text_edit_range;
 		const String &display_text = code_completion_options[code_completion_current_selected].display;
 
-		if (p_replace) {
-			// Find end of current section.
-			const String line = get_line(caret_line);
-			int caret_col = get_caret_column(i);
-			int caret_remove_line = caret_line;
+		if (!text_edit.is_empty()) {
+			int column = text_edit_range.first;
+			int column2 = text_edit_range.second;
 
-			bool merge_text = true;
-			int in_string = is_in_string(caret_line, caret_col);
-			if (in_string != -1) {
-				Point2 string_end = get_delimiter_end_position(caret_line, caret_col);
-				if (string_end.x != -1) {
-					merge_text = false;
-					caret_remove_line = string_end.y;
-					caret_col = string_end.x - 1;
+			String pos_line = get_line(caret_line);
+			int from_column = column - 1;
+			int to_column = column2 - 1;
+
+			if (pos_line.contains_char('\t')) {
+				int tab_size = get_indent_size();
+
+				int in_col = 1;
+				from_column = 0;
+
+				while (from_column < pos_line.size() && in_col < column) {
+					if (pos_line[from_column] == '\t') {
+						in_col += tab_size;
+						from_column++;
+					} else {
+						in_col++;
+						from_column++;
+					}
 				}
-			}
 
-			if (merge_text) {
-				for (; caret_col < line.length(); caret_col++) {
-					if (is_symbol(line[caret_col])) {
-						break;
+				in_col = 1;
+				to_column = 0;
+
+				while (to_column < pos_line.size() && in_col < column2) {
+					if (pos_line[to_column] == '\t') {
+						in_col += tab_size;
+						to_column++;
+					} else {
+						in_col++;
+						to_column++;
 					}
 				}
 			}
 
-			// Replace.
-			remove_text(caret_line, get_caret_column(i) - code_completion_base.length(), caret_remove_line, caret_col);
-			insert_text_at_caret(insert_text, i);
+			remove_text(caret_line, from_column, caret_line, to_column);
+			insert_text_at_caret(text_edit, i);
 		} else {
-			// Get first non-matching char.
-			const String line = get_line(caret_line);
-			int caret_col = get_caret_column(i);
-			int matching_chars = code_completion_base.length();
-			for (; matching_chars <= insert_text.length(); matching_chars++) {
-				if (caret_col >= line.length() || line[caret_col] != insert_text[matching_chars]) {
-					break;
+			if (p_replace) {
+				// Find end of current section.
+				const String line = get_line(caret_line);
+				int caret_col = get_caret_column(i);
+				int caret_remove_line = caret_line;
+
+				bool merge_text = true;
+				int in_string = is_in_string(caret_line, caret_col);
+				if (in_string != -1) {
+					Point2 string_end = get_delimiter_end_position(caret_line, caret_col);
+					if (string_end.x != -1) {
+						merge_text = false;
+						caret_remove_line = string_end.y;
+						caret_col = string_end.x - 1;
+					}
 				}
-				caret_col++;
+
+				if (merge_text) {
+					for (; caret_col < line.length(); caret_col++) {
+						if (is_symbol(line[caret_col])) {
+							break;
+						}
+					}
+				}
+
+				// Replace.
+				remove_text(caret_line, get_caret_column(i) - code_completion_base.length(), caret_remove_line, caret_col);
+				insert_text_at_caret(insert_text, i);
+			} else {
+				// Get first non-matching char.
+				const String line = get_line(caret_line);
+				int caret_col = get_caret_column(i);
+				int matching_chars = code_completion_base.length();
+				for (; matching_chars <= insert_text.length(); matching_chars++) {
+					if (caret_col >= line.length() || line[caret_col] != insert_text[matching_chars]) {
+						break;
+					}
+					caret_col++;
+				}
+
+				// Remove base completion text.
+				remove_text(caret_line, get_caret_column(i) - code_completion_base.length(), caret_line, get_caret_column(i));
+
+				// Merge with text.
+				insert_text_at_caret(insert_text.substr(0, code_completion_base.length()), i);
+				set_caret_column(caret_col, false, i);
+				insert_text_at_caret(insert_text.substr(matching_chars), i);
 			}
 
-			// Remove base completion text.
-			remove_text(caret_line, get_caret_column(i) - code_completion_base.length(), caret_line, get_caret_column(i));
-
-			// Merge with text.
-			insert_text_at_caret(insert_text.substr(0, code_completion_base.length()), i);
-			set_caret_column(caret_col, false, i);
-			insert_text_at_caret(insert_text.substr(matching_chars), i);
-		}
-
-		// Handle merging of symbols eg strings, brackets.
-		caret_line = get_caret_line(i);
-		const String line = get_line(caret_line);
-		char32_t next_char = line[get_caret_column(i)];
-		char32_t last_completion_char = insert_text[insert_text.length() - 1];
-		if (i == 0) {
-			caret_last_completion_char = last_completion_char;
-		}
-		char32_t last_completion_char_display = display_text[display_text.length() - 1];
-
-		bool last_char_matches = (last_completion_char == next_char || last_completion_char_display == next_char);
-		int pre_brace_pair = get_caret_column(i) > 0 ? _get_auto_brace_pair_open_at_pos(caret_line, get_caret_column(i)) : -1;
-		int post_brace_pair = get_caret_column(i) < get_line(caret_line).length() ? _get_auto_brace_pair_close_at_pos(caret_line, get_caret_column(i)) : -1;
-
-		// Strings do not nest like brackets, so ensure we don't add an additional closing pair.
-		if (has_string_delimiter(String::chr(last_completion_char))) {
-			if (post_brace_pair != -1 && last_char_matches) {
-				remove_text(caret_line, get_caret_column(i), caret_line, get_caret_column(i) + 1);
+			// Handle merging of symbols eg strings, brackets.
+			caret_line = get_caret_line(i);
+			const String line = get_line(caret_line);
+			char32_t next_char = line[get_caret_column(i)];
+			char32_t last_completion_char = insert_text[insert_text.length() - 1];
+			if (i == 0) {
+				caret_last_completion_char = last_completion_char;
 			}
-		} else {
-			if (pre_brace_pair != -1 && pre_brace_pair != post_brace_pair && last_char_matches) {
-				remove_text(caret_line, get_caret_column(i), caret_line, get_caret_column(i) + 1);
-			} else if (auto_brace_completion_enabled && pre_brace_pair != -1) {
-				insert_text_at_caret(auto_brace_completion_pairs[pre_brace_pair].close_key, i);
-				set_caret_column(get_caret_column(i) - auto_brace_completion_pairs[pre_brace_pair].close_key.length(), i == 0, i);
-			}
-		}
+			char32_t last_completion_char_display = display_text[display_text.length() - 1];
 
-		if (pre_brace_pair == -1 && post_brace_pair == -1 && get_caret_column(i) > 0 && get_caret_column(i) < get_line(caret_line).length()) {
-			pre_brace_pair = _get_auto_brace_pair_open_at_pos(caret_line, get_caret_column(i) + 1);
-			if (pre_brace_pair != -1 && pre_brace_pair == _get_auto_brace_pair_close_at_pos(caret_line, get_caret_column(i) - 1)) {
-				remove_text(caret_line, get_caret_column(i) - 2, caret_line, get_caret_column(i));
-				if (_get_auto_brace_pair_close_at_pos(caret_line, get_caret_column(i) + 1) != pre_brace_pair) {
-					set_caret_column(get_caret_column(i) + 1, i == 0, i);
-				} else {
-					set_caret_column(get_caret_column(i) + 2, i == 0, i);
+			bool last_char_matches = (last_completion_char == next_char || last_completion_char_display == next_char);
+			int pre_brace_pair = get_caret_column(i) > 0 ? _get_auto_brace_pair_open_at_pos(caret_line, get_caret_column(i)) : -1;
+			int post_brace_pair = get_caret_column(i) < get_line(caret_line).length() ? _get_auto_brace_pair_close_at_pos(caret_line, get_caret_column(i)) : -1;
+
+			// Strings do not nest like brackets, so ensure we don't add an additional closing pair.
+			if (has_string_delimiter(String::chr(last_completion_char))) {
+				if (post_brace_pair != -1 && last_char_matches) {
+					remove_text(caret_line, get_caret_column(i), caret_line, get_caret_column(i) + 1);
+				}
+			} else {
+				if (pre_brace_pair != -1 && pre_brace_pair != post_brace_pair && last_char_matches) {
+					remove_text(caret_line, get_caret_column(i), caret_line, get_caret_column(i) + 1);
+				} else if (auto_brace_completion_enabled && pre_brace_pair != -1) {
+					insert_text_at_caret(auto_brace_completion_pairs[pre_brace_pair].close_key, i);
+					set_caret_column(get_caret_column(i) - auto_brace_completion_pairs[pre_brace_pair].close_key.length(), i == 0, i);
+				}
+			}
+
+			if (pre_brace_pair == -1 && post_brace_pair == -1 && get_caret_column(i) > 0 && get_caret_column(i) < get_line(caret_line).length()) {
+				pre_brace_pair = _get_auto_brace_pair_open_at_pos(caret_line, get_caret_column(i) + 1);
+				if (pre_brace_pair != -1 && pre_brace_pair == _get_auto_brace_pair_close_at_pos(caret_line, get_caret_column(i) - 1)) {
+					remove_text(caret_line, get_caret_column(i) - 2, caret_line, get_caret_column(i));
+					if (_get_auto_brace_pair_close_at_pos(caret_line, get_caret_column(i) + 1) != pre_brace_pair) {
+						set_caret_column(get_caret_column(i) + 1, i == 0, i);
+					} else {
+						set_caret_column(get_caret_column(i) + 2, i == 0, i);
+					}
 				}
 			}
 		}

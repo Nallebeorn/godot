@@ -3037,7 +3037,13 @@ static void _list_call_arguments(GDScriptParser::CompletionContext &p_context, c
 										}
 									}
 								}
-								ScriptLanguage::CodeCompletionOption option(opt, ScriptLanguage::CODE_COMPLETION_KIND_PLAIN_TEXT);
+
+								ScriptLanguage::CodeCompletionOption option;
+								if (p_call->arguments.size() > p_argidx) {
+									option = { opt, Pair(p_call->arguments[p_argidx]->start_column, p_call->arguments[p_argidx]->end_column), ScriptLanguage::CODE_COMPLETION_KIND_PLAIN_TEXT };
+								} else {
+									option = { opt, ScriptLanguage::CODE_COMPLETION_KIND_PLAIN_TEXT };
+								}
 								r_result.insert(option.display, option);
 							}
 						}

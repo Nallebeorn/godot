@@ -184,6 +184,10 @@ Array GDScriptTextDocument::completion(const Dictionary &p_params) {
 			item.label = option.display;
 			item.data = request_data;
 			item.insertText = option.insert_text;
+			item.textEdit.newText = option.text_edit;
+			item.textEdit.range.start.line = item.textEdit.range.end.line = params.position.line;
+			item.textEdit.range.start.character = option.text_edit_range.first;
+			item.textEdit.range.end.character = option.text_edit_range.second;
 
 			switch (option.kind) {
 				case ScriptLanguage::CODE_COMPLETION_KIND_ENUM:
@@ -329,7 +333,7 @@ Dictionary GDScriptTextDocument::resolve(const Dictionary &p_params) {
 		}
 	}
 
-	if (item.kind == LSP::CompletionItemKind::Method) {
+	if (item.kind == LSP::CompletionItemKind::Method || item.kind == LSP::CompletionItemKind::Constant || item.kind == LSP::CompletionItemKind::File) {
 		bool is_trigger_character = params.context.triggerKind == LSP::CompletionTriggerKind::TriggerCharacter;
 		bool is_quote_character = params.context.triggerCharacter == "\"" || params.context.triggerCharacter == "'";
 

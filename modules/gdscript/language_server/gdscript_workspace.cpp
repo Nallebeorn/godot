@@ -670,6 +670,12 @@ void GDScriptWorkspace::completion(const LSP::CompletionParams &p_params, List<S
 
 		String code = parser->get_text_for_completion(p_params.position);
 		GDScriptLanguage::get_singleton()->complete_code(code, path, current, r_options, forced, call_hint);
+
+		for (ScriptLanguage::CodeCompletionOption &option : *r_options) {
+			option.text_edit_range.first = GodotPosition(p_params.position.line + 1, option.text_edit_range.first).to_lsp(parser->get_lines()).character;
+			option.text_edit_range.second = GodotPosition(p_params.position.line + 1, option.text_edit_range.second).to_lsp(parser->get_lines()).character;
+		}
+
 		if (owner_scene_node) {
 			memdelete(owner_scene_node);
 		}

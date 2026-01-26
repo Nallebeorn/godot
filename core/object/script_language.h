@@ -311,7 +311,11 @@ public:
 	struct CodeCompletionOption {
 		CodeCompletionKind kind = CODE_COMPLETION_KIND_PLAIN_TEXT;
 		String display;
+
 		String insert_text;
+		String text_edit; // optional, overrides insert_text if set
+		Pair<int, int> text_edit_range;
+
 		Color font_color;
 		Ref<Resource> icon;
 		Variant default_value;
@@ -325,6 +329,15 @@ public:
 		CodeCompletionOption(const String &p_text, CodeCompletionKind p_kind, int p_location = LOCATION_OTHER, const String &p_theme_color_name = "") {
 			display = p_text;
 			insert_text = p_text;
+			kind = p_kind;
+			location = p_location;
+			theme_color_name = p_theme_color_name;
+		}
+
+		CodeCompletionOption(const String &p_text, Pair<int, int> p_text_edit_range, CodeCompletionKind p_kind, int p_location = LOCATION_OTHER, const String &p_theme_color_name = "") {
+			display = p_text;
+			text_edit = p_text;
+			text_edit_range = p_text_edit_range;
 			kind = p_kind;
 			location = p_location;
 			theme_color_name = p_theme_color_name;

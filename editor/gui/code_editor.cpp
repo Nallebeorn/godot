@@ -1048,7 +1048,11 @@ void CodeTextEditor::_complete_request() {
 		} else if (e.insert_text.begins_with("#") || e.insert_text.begins_with("//")) {
 			font_color = completion_comment_color;
 		}
-		text_editor->add_code_completion_option((CodeEdit::CodeCompletionKind)e.kind, e.display, e.insert_text, font_color, _get_completion_icon(e), e.default_value, e.location);
+		if (!e.text_edit.is_empty()) {
+			text_editor->add_code_completion_option_text_edit((CodeEdit::CodeCompletionKind)e.kind, e.display, e.text_edit, e.text_edit_range, font_color, _get_completion_icon(e), e.default_value, e.location);
+		} else {
+			text_editor->add_code_completion_option((CodeEdit::CodeCompletionKind)e.kind, e.display, e.insert_text, font_color, _get_completion_icon(e), e.default_value, e.location);
+		}
 	}
 	text_editor->update_code_completion_options(forced);
 }
