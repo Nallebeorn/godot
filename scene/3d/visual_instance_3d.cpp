@@ -216,14 +216,9 @@ VisualInstance3D::~VisualInstance3D() {
 }
 
 void GeometryInstance3D::set_material_override(const Ref<Material> &p_material) {
-	if (material_override.is_valid()) {
-		material_override->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
-	}
 	material_override = p_material;
-	if (material_override.is_valid()) {
-		material_override->connect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
-	}
 	RS::get_singleton()->instance_geometry_set_material_override(get_instance(), p_material.is_valid() ? p_material->get_rid() : RID());
+	_update_assigned_materials();
 }
 
 Ref<Material> GeometryInstance3D::get_material_override() const {
@@ -233,6 +228,7 @@ Ref<Material> GeometryInstance3D::get_material_override() const {
 void GeometryInstance3D::set_material_overlay(const Ref<Material> &p_material) {
 	material_overlay = p_material;
 	RS::get_singleton()->instance_geometry_set_material_overlay(get_instance(), p_material.is_valid() ? p_material->get_rid() : RID());
+	_update_assigned_materials();
 }
 
 Ref<Material> GeometryInstance3D::get_material_overlay() const {
@@ -318,6 +314,23 @@ const StringName *GeometryInstance3D::_instance_uniform_get_remap(const StringNa
 	}
 
 	return r;
+}
+
+void GeometryInstance3D::_update_assigned_materials() {
+	for (const Ref<Material> &mat : assigned_materials) {
+		mat->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
+	}
+	assigned_materials.clear();
+	if (material_override.is_valid()) {
+		assigned_materials.push_back(material_override);
+	}
+	if (material_overlay.is_valid() && material_overlay != material_override) {
+		assigned_materials.push_back(material_overlay);
+	}
+	for (const Ref<Material> &mat : assigned_materials) {
+		mat->connect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
+	}
+	notify_property_list_changed();
 }
 
 bool GeometryInstance3D::_set(const StringName &p_name, const Variant &p_value) {

@@ -42,12 +42,13 @@ class MultiMeshInstance3D : public GeometryInstance3D {
 	GDCLASS(MultiMeshInstance3D, GeometryInstance3D);
 
 	Ref<MultiMesh> multimesh;
-	LocalVector<Ref<Material>> mesh_surface_materials;
+	LocalVector<Ref<Material>> assigned_surface_materials;
 	Ref<Mesh> multimesh_mesh;
 
 	void _refresh_interpolated();
 	void _multimesh_changed();
-	void _multimesh_mesh_changed();
+	// void _multimesh_mesh_changed();
+	void _update_assigned_surface_materials();
 
 protected:
 	virtual void _physics_interpolated_changed() override;

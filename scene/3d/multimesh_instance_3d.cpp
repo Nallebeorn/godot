@@ -50,53 +50,55 @@ void MultiMeshInstance3D::_refresh_interpolated() {
 }
 
 void MultiMeshInstance3D::_multimesh_changed() {
-	ERR_FAIL_COND(multimesh.is_null());
-
 	if (multimesh_mesh.is_valid()) {
-		multimesh_mesh->disconnect_changed(callable_mp(this, &MultiMeshInstance3D::_multimesh_mesh_changed));
+		multimesh_mesh->disconnect_changed(callable_mp(this, &MultiMeshInstance3D::_update_assigned_surface_materials));
 	}
 
-	multimesh_mesh = multimesh->get_mesh();
+	multimesh_mesh = multimesh.is_null() ? Ref<Mesh>() : multimesh->get_mesh();
 
 	if (multimesh_mesh.is_valid()) {
-		multimesh_mesh->connect_changed(callable_mp(this, &MultiMeshInstance3D::_multimesh_mesh_changed));
-		_multimesh_mesh_changed();
-	} else {
-		for (Ref<Material> &mesh_material : mesh_surface_materials) {
-			if (mesh_material.is_valid()) {
-				mesh_material->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
-			}
-		}
-		mesh_surface_materials.clear();
+		multimesh_mesh->connect_changed(callable_mp(this, &MultiMeshInstance3D::_update_assigned_surface_materials));
 	}
+	_update_assigned_surface_materials();
 }
 
-void MultiMeshInstance3D::_multimesh_mesh_changed() {
-	ERR_FAIL_COND(multimesh_mesh.is_null());
+void MultiMeshInstance3D::_update_assigned_surface_materials() {
+	for (Ref<Material> &mat : assigned_surface_materials) {
+		mat->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
+	}
+
+	if (multimesh_mesh.is_null()) {
+		assigned_surface_materials.clear();
+		notify_property_list_changed();
+		return;
+	}
+
 	const int surface_count = multimesh_mesh->get_surface_count();
 	ERR_FAIL_COND(surface_count < 0);
+	LocalVector<Ref<Material>> new_surface_materials;
+	new_surface_materials.reserve(surface_count);
 
-	for (Ref<Material> &mesh_material : mesh_surface_materials) {
-		if (mesh_material.is_valid()) {
-			mesh_material->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
+	for (int surface_index = 0; surface_index < surface_count; ++surface_index) {
+		const Ref<Material> &mesh_material = multimesh_mesh->surface_get_material(surface_index);
+		if (mesh_material.is_valid() && !new_surface_materials.has(mesh_material)) {
+			new_surface_materials.push_back(mesh_material);
 		}
 	}
 
 	bool did_materials_change = false;
-	if (mesh_surface_materials.size() != (uint32_t)surface_count) {
+	if (new_surface_materials.size() != assigned_surface_materials.size()) {
 		did_materials_change = true;
-		mesh_surface_materials.resize(surface_count);
+		assigned_surface_materials.resize(new_surface_materials.size());
 	}
-
-	for (int surface_index = 0; surface_index < surface_count; ++surface_index) {
-		Ref<Material> mesh_material = multimesh_mesh->surface_get_material(surface_index);
-		if (mesh_material != mesh_surface_materials[surface_index]) {
+	for (uint32_t i = 0; i < new_surface_materials.size(); ++i) {
+		if (new_surface_materials[i] != assigned_surface_materials[i]) {
+			assigned_surface_materials[i] = new_surface_materials[i];
 			did_materials_change = true;
 		}
-		if (mesh_material.is_valid()) {
-			mesh_material->connect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
-			mesh_surface_materials.push_back(mesh_material);
-		}
+	}
+
+	for (Ref<Material> &mat : assigned_surface_materials) {
+		mat->connect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
 	}
 
 	if (did_materials_change) {
@@ -130,11 +132,10 @@ void MultiMeshInstance3D::set_multimesh(const Ref<MultiMesh> &p_multimesh) {
 		set_base(multimesh->get_rid());
 		_refresh_interpolated();
 		multimesh->connect_changed(callable_mp(this, &MultiMeshInstance3D::_multimesh_changed));
-		_multimesh_changed();
 	} else {
 		set_base(RID());
 	}
-	notify_property_list_changed();
+	_multimesh_changed();
 }
 
 Ref<MultiMesh> MultiMeshInstance3D::get_multimesh() const {
