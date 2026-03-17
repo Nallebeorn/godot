@@ -223,6 +223,7 @@ void MultiMesh::set_mesh(const Ref<Mesh> &p_mesh) {
 	} else {
 		RenderingServer::get_singleton()->multimesh_set_mesh(multimesh, RID());
 	}
+	emit_changed();
 }
 
 Ref<Mesh> MultiMesh::get_mesh() const {
