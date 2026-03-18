@@ -50,6 +50,7 @@ void MultiMeshInstance3D::_refresh_interpolated() {
 }
 
 void MultiMeshInstance3D::_multimesh_changed() {
+#ifdef TOOLS_ENABLED
 	if (multimesh_mesh.is_valid()) {
 		multimesh_mesh->disconnect_changed(callable_mp(this, &MultiMeshInstance3D::_update_assigned_surface_materials));
 	}
@@ -59,9 +60,12 @@ void MultiMeshInstance3D::_multimesh_changed() {
 	if (multimesh_mesh.is_valid()) {
 		multimesh_mesh->connect_changed(callable_mp(this, &MultiMeshInstance3D::_update_assigned_surface_materials));
 	}
+
 	_update_assigned_surface_materials();
+#endif // TOOLS_ENABLED
 }
 
+#ifdef TOOLS_ENABLED
 void MultiMeshInstance3D::_update_assigned_surface_materials() {
 	for (Ref<Material> &mat : assigned_surface_materials) {
 		mat->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
@@ -105,6 +109,7 @@ void MultiMeshInstance3D::_update_assigned_surface_materials() {
 		notify_property_list_changed();
 	}
 }
+#endif // TOOLS_ENABLED
 
 void MultiMeshInstance3D::_physics_interpolated_changed() {
 	VisualInstance3D::_physics_interpolated_changed();

@@ -383,7 +383,9 @@ void MeshInstance3D::set_surface_override_material(int p_surface, const Ref<Mate
 		RS::get_singleton()->instance_set_surface_override_material(get_instance(), p_surface, RID());
 	}
 
+#ifdef TOOLS_ENABLED
 	_update_assigned_surface_materials();
+#endif // TOOLS_ENABLED
 }
 
 Ref<Material> MeshInstance3D::get_surface_override_material(int p_surface) const {
@@ -411,6 +413,7 @@ Ref<Material> MeshInstance3D::get_active_material(int p_surface) const {
 	return m->surface_get_material(p_surface);
 }
 
+#ifdef TOOLS_ENABLED
 void MeshInstance3D::_update_assigned_surface_materials() {
 	for (Ref<Material> &mat : assigned_surface_materials) {
 		mat->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
@@ -441,15 +444,15 @@ void MeshInstance3D::_update_assigned_surface_materials() {
 		}
 	}
 
-	bool changed = false;
+	bool did_materials_change = false;
 	if (new_surface_materials.size() != assigned_surface_materials.size()) {
-		changed = true;
+		did_materials_change = true;
 		assigned_surface_materials.resize(new_surface_materials.size());
 	}
 	for (uint32_t i = 0; i < new_surface_materials.size(); ++i) {
 		if (new_surface_materials[i] != assigned_surface_materials[i]) {
 			assigned_surface_materials[i] = new_surface_materials[i];
-			changed = true;
+			did_materials_change = true;
 		}
 	}
 
@@ -457,10 +460,11 @@ void MeshInstance3D::_update_assigned_surface_materials() {
 		mat->connect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
 	}
 
-	if (changed) {
+	if (did_materials_change) {
 		notify_property_list_changed();
 	}
 }
+#endif //TOOLS_ENABLED
 
 void MeshInstance3D::_mesh_changed() {
 	ERR_FAIL_COND(mesh.is_null());
@@ -488,7 +492,9 @@ void MeshInstance3D::_mesh_changed() {
 	}
 
 	update_gizmos();
+#ifdef TOOLS_ENABLED
 	_update_assigned_surface_materials();
+#endif // TOOLS_ENABLED
 }
 
 MeshInstance3D *MeshInstance3D::create_debug_tangents_node() {

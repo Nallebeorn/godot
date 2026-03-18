@@ -124,7 +124,6 @@ private:
 	ShadowCastingSetting shadow_casting_setting = SHADOW_CASTING_SETTING_ON;
 	Ref<Material> material_override;
 	Ref<Material> material_overlay;
-	LocalVector<Ref<Material>> assigned_materials;
 
 	float visibility_range_begin = 0.0;
 	float visibility_range_end = 0.0;
@@ -146,7 +145,11 @@ private:
 	bool ignore_occlusion_culling = false;
 
 	const StringName *_instance_uniform_get_remap(const StringName &p_name) const;
+
+#ifdef TOOLS_ENABLED
 	void _update_assigned_materials();
+	LocalVector<Ref<Material>> assigned_materials;
+#endif // TOOLS_ENABLED
 
 protected:
 	bool _set(const StringName &p_name, const Variant &p_value);

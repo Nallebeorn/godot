@@ -218,7 +218,9 @@ VisualInstance3D::~VisualInstance3D() {
 void GeometryInstance3D::set_material_override(const Ref<Material> &p_material) {
 	material_override = p_material;
 	RS::get_singleton()->instance_geometry_set_material_override(get_instance(), p_material.is_valid() ? p_material->get_rid() : RID());
+#ifdef TOOLS_ENABLED
 	_update_assigned_materials();
+#endif
 }
 
 Ref<Material> GeometryInstance3D::get_material_override() const {
@@ -228,7 +230,9 @@ Ref<Material> GeometryInstance3D::get_material_override() const {
 void GeometryInstance3D::set_material_overlay(const Ref<Material> &p_material) {
 	material_overlay = p_material;
 	RS::get_singleton()->instance_geometry_set_material_overlay(get_instance(), p_material.is_valid() ? p_material->get_rid() : RID());
+#ifdef TOOLS_ENABLED
 	_update_assigned_materials();
+#endif
 }
 
 Ref<Material> GeometryInstance3D::get_material_overlay() const {
@@ -316,6 +320,7 @@ const StringName *GeometryInstance3D::_instance_uniform_get_remap(const StringNa
 	return r;
 }
 
+#ifdef TOOLS_ENABLED
 void GeometryInstance3D::_update_assigned_materials() {
 	for (const Ref<Material> &mat : assigned_materials) {
 		mat->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
@@ -332,6 +337,7 @@ void GeometryInstance3D::_update_assigned_materials() {
 	}
 	notify_property_list_changed();
 }
+#endif // TOOLS_ENABLED
 
 bool GeometryInstance3D::_set(const StringName &p_name, const Variant &p_value) {
 	const StringName *r = _instance_uniform_get_remap(p_name);
