@@ -44,10 +44,8 @@ class MultiMeshInstance3D : public GeometryInstance3D {
 	Ref<MultiMesh> multimesh;
 
 	void _refresh_interpolated();
-	void _multimesh_changed();
 
 #ifdef TOOLS_ENABLED
-	Ref<Mesh> multimesh_mesh;
 	LocalVector<Ref<Material>> assigned_surface_materials;
 	void _update_assigned_surface_materials();
 #endif // TOOLS_ENABLED

@@ -278,6 +278,9 @@ void PrimitiveMesh::set_material(const Ref<Material> &p_material) {
 		notify_property_list_changed();
 		emit_changed();
 	}
+#ifdef TOOLS_ENABLED
+	emit_signal("_mesh_materials_updated");
+#endif // TOOLS_ENABLED
 }
 
 Ref<Material> PrimitiveMesh::get_material() const {

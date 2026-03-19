@@ -49,65 +49,29 @@ void MultiMeshInstance3D::_refresh_interpolated() {
 	}
 }
 
-void MultiMeshInstance3D::_multimesh_changed() {
-#ifdef TOOLS_ENABLED
-	if (multimesh_mesh.is_valid()) {
-		multimesh_mesh->disconnect_changed(callable_mp(this, &MultiMeshInstance3D::_update_assigned_surface_materials));
-	}
-
-	multimesh_mesh = multimesh.is_null() ? Ref<Mesh>() : multimesh->get_mesh();
-
-	if (multimesh_mesh.is_valid()) {
-		multimesh_mesh->connect_changed(callable_mp(this, &MultiMeshInstance3D::_update_assigned_surface_materials));
-	}
-
-	_update_assigned_surface_materials();
-#endif // TOOLS_ENABLED
-}
-
 #ifdef TOOLS_ENABLED
 void MultiMeshInstance3D::_update_assigned_surface_materials() {
 	for (Ref<Material> &mat : assigned_surface_materials) {
 		mat->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
 	}
 
-	if (multimesh_mesh.is_null()) {
-		assigned_surface_materials.clear();
-		notify_property_list_changed();
-		return;
-	}
+	if (multimesh.is_valid() && multimesh->get_mesh().is_valid()) {
+		const int surface_count = multimesh->get_mesh()->get_surface_count();
+		ERR_FAIL_COND(surface_count < 0);
 
-	const int surface_count = multimesh_mesh->get_surface_count();
-	ERR_FAIL_COND(surface_count < 0);
-	LocalVector<Ref<Material>> new_surface_materials;
-	new_surface_materials.reserve(surface_count);
+		for (int surface_index = 0; surface_index < surface_count; ++surface_index) {
+			const Ref<Material> &mesh_material = multimesh->get_mesh()->surface_get_material(surface_index);
+			if (mesh_material.is_valid() && !assigned_surface_materials.has(mesh_material)) {
+				assigned_surface_materials.push_back(mesh_material);
+			}
+		}
 
-	for (int surface_index = 0; surface_index < surface_count; ++surface_index) {
-		const Ref<Material> &mesh_material = multimesh_mesh->surface_get_material(surface_index);
-		if (mesh_material.is_valid() && !new_surface_materials.has(mesh_material)) {
-			new_surface_materials.push_back(mesh_material);
+		for (Ref<Material> &mat : assigned_surface_materials) {
+			mat->connect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
 		}
 	}
 
-	bool did_materials_change = false;
-	if (new_surface_materials.size() != assigned_surface_materials.size()) {
-		did_materials_change = true;
-		assigned_surface_materials.resize(new_surface_materials.size());
-	}
-	for (uint32_t i = 0; i < new_surface_materials.size(); ++i) {
-		if (new_surface_materials[i] != assigned_surface_materials[i]) {
-			assigned_surface_materials[i] = new_surface_materials[i];
-			did_materials_change = true;
-		}
-	}
-
-	for (Ref<Material> &mat : assigned_surface_materials) {
-		mat->connect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
-	}
-
-	if (did_materials_change) {
-		notify_property_list_changed();
-	}
+	notify_property_list_changed();
 }
 #endif // TOOLS_ENABLED
 
@@ -129,18 +93,27 @@ void MultiMeshInstance3D::_notification(int p_what) {
 }
 
 void MultiMeshInstance3D::set_multimesh(const Ref<MultiMesh> &p_multimesh) {
+#ifdef TOOLS_ENABLED
 	if (multimesh.is_valid()) {
-		multimesh->disconnect_changed(callable_mp(this, &MultiMeshInstance3D::_multimesh_changed));
+		multimesh->disconnect("_mesh_materials_updated", callable_mp(this, &MultiMeshInstance3D::_update_assigned_surface_materials));
 	}
+#endif // TOOLS_ENABLED
+
 	multimesh = p_multimesh;
+
 	if (multimesh.is_valid()) {
 		set_base(multimesh->get_rid());
 		_refresh_interpolated();
-		multimesh->connect_changed(callable_mp(this, &MultiMeshInstance3D::_multimesh_changed));
+#ifdef TOOLS_ENABLED
+		multimesh->connect("_mesh_materials_updated", callable_mp(this, &MultiMeshInstance3D::_update_assigned_surface_materials));
+#endif // TOOLS_ENABLED
 	} else {
 		set_base(RID());
 	}
-	_multimesh_changed();
+
+#ifdef TOOLS_ENABLED
+	_update_assigned_surface_materials();
+#endif // TOOLS_ENABLED
 }
 
 Ref<MultiMesh> MultiMeshInstance3D::get_multimesh() const {

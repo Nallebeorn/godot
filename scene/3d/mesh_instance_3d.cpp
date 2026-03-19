@@ -124,6 +124,9 @@ void MeshInstance3D::set_mesh(const Ref<Mesh> &p_mesh) {
 
 	if (mesh.is_valid()) {
 		mesh->disconnect_changed(callable_mp(this, &MeshInstance3D::_mesh_changed));
+#ifdef TOOLS_ENABLED
+		mesh->disconnect("_mesh_materials_updated", callable_mp(this, &MeshInstance3D::_update_assigned_surface_materials));
+#endif // TOOLS_ENABLED
 	}
 
 	mesh = p_mesh;
@@ -134,6 +137,9 @@ void MeshInstance3D::set_mesh(const Ref<Mesh> &p_mesh) {
 		set_base(mesh->get_rid());
 		mesh->connect_changed(callable_mp(this, &MeshInstance3D::_mesh_changed));
 		_mesh_changed();
+#ifdef TOOLS_ENABLED
+		mesh->connect("_mesh_materials_updated", callable_mp(this, &MeshInstance3D::_update_assigned_surface_materials));
+#endif //TOOLS_ENABLED
 	} else {
 		blend_shape_tracks.clear();
 		blend_shape_properties.clear();
@@ -143,6 +149,9 @@ void MeshInstance3D::set_mesh(const Ref<Mesh> &p_mesh) {
 
 	notify_property_list_changed();
 	update_configuration_warnings();
+#ifdef TOOLS_ENABLED
+	_update_assigned_surface_materials();
+#endif
 }
 
 Ref<Mesh> MeshInstance3D::get_mesh() const {
@@ -415,60 +424,43 @@ Ref<Material> MeshInstance3D::get_active_material(int p_surface) const {
 
 #ifdef TOOLS_ENABLED
 void MeshInstance3D::_update_assigned_surface_materials() {
-	for (Ref<Material> &mat : assigned_surface_materials) {
+	for (const Ref<Material> &mat : assigned_surface_materials) {
 		mat->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
 	}
 
-	if (mesh.is_null()) {
-		assigned_surface_materials.clear();
-		notify_property_list_changed();
-		return;
-	}
+	assigned_surface_materials.clear();
 
-	const int surface_count = mesh->get_surface_count();
-	ERR_FAIL_COND(surface_count < 0);
-	LocalVector<Ref<Material>> new_surface_materials;
-	new_surface_materials.reserve(surface_count);
+	if (mesh.is_valid()) {
+		const int surface_count = mesh->get_surface_count();
+		ERR_FAIL_COND(surface_count < 0);
 
-	for (int surface_index = 0; surface_index < surface_count; ++surface_index) {
-		const Ref<Material> &override_material = surface_override_materials[surface_index];
-		if (override_material.is_valid()) {
-			if (!new_surface_materials.has(override_material)) {
-				new_surface_materials.push_back(override_material);
+		for (int surface_index = 0; surface_index < surface_count; ++surface_index) {
+			const Ref<Material> &override_material = surface_override_materials[surface_index];
+			if (override_material.is_valid()) {
+				if (!assigned_surface_materials.has(override_material)) {
+					assigned_surface_materials.push_back(override_material);
+				}
+			} else {
+				const Ref<Material> &mesh_material = mesh->surface_get_material(surface_index);
+				if (mesh_material.is_valid() && !assigned_surface_materials.has(mesh_material)) {
+					assigned_surface_materials.push_back(mesh_material);
+				}
 			}
-		} else {
-			const Ref<Material> &mesh_material = mesh->surface_get_material(surface_index);
-			if (mesh_material.is_valid() && !new_surface_materials.has(mesh_material)) {
-				new_surface_materials.push_back(mesh_material);
-			}
+		}
+
+		for (const Ref<Material> &mat : assigned_surface_materials) {
+			mat->connect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
 		}
 	}
 
-	bool did_materials_change = false;
-	if (new_surface_materials.size() != assigned_surface_materials.size()) {
-		did_materials_change = true;
-		assigned_surface_materials.resize(new_surface_materials.size());
-	}
-	for (uint32_t i = 0; i < new_surface_materials.size(); ++i) {
-		if (new_surface_materials[i] != assigned_surface_materials[i]) {
-			assigned_surface_materials[i] = new_surface_materials[i];
-			did_materials_change = true;
-		}
-	}
-
-	for (Ref<Material> &mat : assigned_surface_materials) {
-		mat->connect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
-	}
-
-	if (did_materials_change) {
-		notify_property_list_changed();
-	}
+	notify_property_list_changed();
 }
 #endif //TOOLS_ENABLED
 
 void MeshInstance3D::_mesh_changed() {
 	ERR_FAIL_COND(mesh.is_null());
 	const int surface_count = mesh->get_surface_count();
+
 	surface_override_materials.resize(surface_count);
 
 	uint32_t initialize_bs_from = blend_shape_tracks.size();
@@ -492,9 +484,6 @@ void MeshInstance3D::_mesh_changed() {
 	}
 
 	update_gizmos();
-#ifdef TOOLS_ENABLED
-	_update_assigned_surface_materials();
-#endif // TOOLS_ENABLED
 }
 
 MeshInstance3D *MeshInstance3D::create_debug_tangents_node() {
