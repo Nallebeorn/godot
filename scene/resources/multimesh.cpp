@@ -30,6 +30,7 @@
 
 #include "multimesh.h"
 
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "servers/rendering/rendering_server.h"
 
@@ -217,12 +218,27 @@ void MultiMesh::set_buffer_interpolated(const Vector<float> &p_buffer_curr, cons
 }
 
 void MultiMesh::set_mesh(const Ref<Mesh> &p_mesh) {
+#ifdef TOOLS_ENABLED
+	if (mesh.is_valid()) {
+		mesh->disconnect("_mesh_materials_updated", callable_mp(this, &MultiMesh::_mesh_materials_updated));
+	}
+#endif // TOOLS_ENABLED
+
 	mesh = p_mesh;
 	if (mesh.is_valid()) {
 		RenderingServer::get_singleton()->multimesh_set_mesh(multimesh, mesh->get_rid());
 	} else {
 		RenderingServer::get_singleton()->multimesh_set_mesh(multimesh, RID());
 	}
+
+	emit_changed();
+
+#ifdef TOOLS_ENABLED
+	_mesh_materials_updated();
+	if (mesh.is_valid()) {
+		mesh->connect("_mesh_materials_updated", callable_mp(this, &MultiMesh::_mesh_materials_updated));
+	}
+#endif // TOOLS_ENABLED
 }
 
 Ref<Mesh> MultiMesh::get_mesh() const {
@@ -362,6 +378,12 @@ MultiMesh::TransformFormat MultiMesh::get_transform_format() const {
 	return transform_format;
 }
 
+#ifdef TOOLS_ENABLED
+void MultiMesh::_mesh_materials_updated() {
+	emit_signal("_mesh_materials_updated");
+}
+#endif // TOOLS_ENABLED
+
 void MultiMesh::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_mesh", "mesh"), &MultiMesh::set_mesh);
 	ClassDB::bind_method(D_METHOD("get_mesh"), &MultiMesh::get_mesh);
@@ -435,6 +457,7 @@ void MultiMesh::_bind_methods() {
 
 MultiMesh::MultiMesh() {
 	multimesh = RenderingServer::get_singleton()->multimesh_create();
+	add_user_signal(MethodInfo("_mesh_materials_updated"));
 }
 
 MultiMesh::~MultiMesh() {

@@ -49,6 +49,34 @@ void MultiMeshInstance3D::_refresh_interpolated() {
 	}
 }
 
+#ifdef TOOLS_ENABLED
+void MultiMeshInstance3D::_update_assigned_surface_materials() {
+	for (Ref<Material> &mat : assigned_surface_materials) {
+		mat->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
+	}
+
+	assigned_surface_materials.clear();
+
+	if (multimesh.is_valid() && multimesh->get_mesh().is_valid()) {
+		const int surface_count = multimesh->get_mesh()->get_surface_count();
+		ERR_FAIL_COND(surface_count < 0);
+
+		for (int surface_index = 0; surface_index < surface_count; ++surface_index) {
+			const Ref<Material> &mesh_material = multimesh->get_mesh()->surface_get_material(surface_index);
+			if (mesh_material.is_valid() && !assigned_surface_materials.has(mesh_material)) {
+				assigned_surface_materials.push_back(mesh_material);
+			}
+		}
+
+		for (Ref<Material> &mat : assigned_surface_materials) {
+			mat->connect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
+		}
+	}
+
+	notify_property_list_changed();
+}
+#endif // TOOLS_ENABLED
+
 void MultiMeshInstance3D::_physics_interpolated_changed() {
 	VisualInstance3D::_physics_interpolated_changed();
 	_refresh_interpolated();
@@ -67,13 +95,27 @@ void MultiMeshInstance3D::_notification(int p_what) {
 }
 
 void MultiMeshInstance3D::set_multimesh(const Ref<MultiMesh> &p_multimesh) {
+#ifdef TOOLS_ENABLED
+	if (multimesh.is_valid()) {
+		multimesh->disconnect("_mesh_materials_updated", callable_mp(this, &MultiMeshInstance3D::_update_assigned_surface_materials));
+	}
+#endif // TOOLS_ENABLED
+
 	multimesh = p_multimesh;
+
 	if (multimesh.is_valid()) {
 		set_base(multimesh->get_rid());
 		_refresh_interpolated();
+#ifdef TOOLS_ENABLED
+		multimesh->connect("_mesh_materials_updated", callable_mp(this, &MultiMeshInstance3D::_update_assigned_surface_materials));
+#endif // TOOLS_ENABLED
 	} else {
 		set_base(RID());
 	}
+
+#ifdef TOOLS_ENABLED
+	_update_assigned_surface_materials();
+#endif // TOOLS_ENABLED
 }
 
 Ref<MultiMesh> MultiMeshInstance3D::get_multimesh() const {

@@ -45,6 +45,11 @@ class MultiMeshInstance3D : public GeometryInstance3D {
 
 	void _refresh_interpolated();
 
+#ifdef TOOLS_ENABLED
+	LocalVector<Ref<Material>> assigned_surface_materials;
+	void _update_assigned_surface_materials();
+#endif // TOOLS_ENABLED
+
 protected:
 	virtual void _physics_interpolated_changed() override;
 	static void _bind_methods();

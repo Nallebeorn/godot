@@ -59,6 +59,10 @@ private:
 	int visible_instance_count = -1;
 	PhysicsInterpolationQuality _physics_interpolation_quality = INTERP_QUALITY_FAST;
 
+#ifdef TOOLS_ENABLED
+	void _mesh_materials_updated();
+#endif // TOOLS_ENABLED
+
 protected:
 	static void _bind_methods();
 

@@ -257,6 +257,9 @@ Mesh::PrimitiveType Mesh::surface_get_primitive_type(int p_idx) const {
 
 void Mesh::surface_set_material(int p_idx, const Ref<Material> &p_material) {
 	GDVIRTUAL_CALL(_surface_set_material, p_idx, p_material);
+#ifdef TOOLS_ENABLED
+	emit_signal("_mesh_materials_updated");
+#endif // TOOLS_ENABLED
 }
 
 Ref<Material> Mesh::surface_get_material(int p_idx) const {
@@ -964,6 +967,9 @@ Transform3D Mesh::get_builtin_bind_pose(int p_index) const {
 }
 
 Mesh::Mesh() {
+#ifdef TOOLS_ENABLED
+	add_user_signal(MethodInfo("_mesh_materials_updated"));
+#endif // TOOLS_ENABLED
 }
 
 enum OldArrayType {
@@ -1953,6 +1959,9 @@ void ArrayMesh::surface_set_material(int p_idx, const Ref<Material> &p_material)
 	RenderingServer::get_singleton()->mesh_surface_set_material(mesh, p_idx, p_material.is_null() ? RID() : p_material->get_rid());
 
 	emit_changed();
+#ifdef TOOLS_ENABLED
+	emit_signal("_mesh_materials_updated");
+#endif // TOOLS_ENABLED
 }
 
 int ArrayMesh::surface_find_by_name(const String &p_name) const {

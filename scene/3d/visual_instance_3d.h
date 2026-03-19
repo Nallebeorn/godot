@@ -146,6 +146,11 @@ private:
 
 	const StringName *_instance_uniform_get_remap(const StringName &p_name) const;
 
+#ifdef TOOLS_ENABLED
+	void _update_assigned_materials();
+	LocalVector<Ref<Material>> assigned_materials;
+#endif // TOOLS_ENABLED
+
 protected:
 	bool _set(const StringName &p_name, const Variant &p_value);
 	bool _get(const StringName &p_name, Variant &r_ret) const;

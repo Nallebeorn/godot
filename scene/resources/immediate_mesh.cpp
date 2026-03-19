@@ -319,6 +319,9 @@ void ImmediateMesh::surface_end() {
 	surface_active = false;
 
 	emit_changed();
+#ifdef TOOLS_ENABLED
+	emit_signal("_mesh_materials_updated");
+#endif // TOOLS_ENABLED
 }
 
 void ImmediateMesh::clear_surfaces() {
@@ -376,6 +379,9 @@ void ImmediateMesh::surface_set_material(int p_idx, const Ref<Material> &p_mater
 		mat = p_material->get_rid();
 	}
 	RS::get_singleton()->mesh_surface_set_material(mesh, p_idx, mat);
+#ifdef TOOLS_ENABLED
+	emit_signal("_mesh_materials_updated");
+#endif // TOOLS_ENABLED
 }
 Ref<Material> ImmediateMesh::surface_get_material(int p_idx) const {
 	ERR_FAIL_INDEX_V(p_idx, int(surfaces.size()), Ref<Material>());
