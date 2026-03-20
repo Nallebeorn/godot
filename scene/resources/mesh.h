@@ -68,6 +68,7 @@ public:
 	};
 
 protected:
+	void _notify_mesh_materials_updated();
 	static void _bind_methods();
 
 	GDVIRTUAL0RC_REQUIRED(int, _get_surface_count)

@@ -44,11 +44,7 @@ class SkinReference;
 class MeshInstance3D : public GeometryInstance3D {
 	GDCLASS(MeshInstance3D, GeometryInstance3D);
 
-private:
-#ifdef TOOLS_ENABLED
-	LocalVector<Ref<Material>> assigned_surface_materials;
-	void _update_assigned_surface_materials();
-#endif // TOOLS_ENABLED
+	void _notify_material_property_list_changed();
 
 protected:
 	Ref<Mesh> mesh;

@@ -271,16 +271,20 @@ void PrimitiveMesh::set_material(const Ref<Material> &p_material) {
 	if (p_material == material) {
 		return;
 	}
+	if (material.is_valid()) {
+		material->disconnect(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &PrimitiveMesh::_notify_mesh_materials_updated));
+	}
 	material = p_material;
+	if (material.is_valid()) {
+		material->connect(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &PrimitiveMesh::_notify_mesh_materials_updated));
+	}
 	if (!pending_request) {
 		// just apply it, else it'll happen when _update is called.
 		RenderingServer::get_singleton()->mesh_surface_set_material(mesh, 0, material.is_null() ? RID() : material->get_rid());
 		notify_property_list_changed();
 		emit_changed();
 	}
-#ifdef TOOLS_ENABLED
-	emit_signal("_mesh_materials_updated");
-#endif // TOOLS_ENABLED
+	_notify_mesh_materials_updated();
 }
 
 Ref<Material> PrimitiveMesh::get_material() const {

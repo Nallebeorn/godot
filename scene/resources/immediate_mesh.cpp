@@ -30,6 +30,7 @@
 
 #include "immediate_mesh.h"
 
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "servers/rendering/rendering_server.h"
 
@@ -289,6 +290,9 @@ void ImmediateMesh::surface_end() {
 	sd.vertex_count = vertices.size();
 	sd.aabb = aabb;
 	if (active_surface_data.material.is_valid()) {
+		if (!active_surface_data.material->is_connected(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ImmediateMesh::_notify_mesh_materials_updated))) {
+			active_surface_data.material->connect(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ImmediateMesh::_notify_mesh_materials_updated));
+		}
 		sd.material = active_surface_data.material->get_rid();
 	}
 
@@ -319,13 +323,16 @@ void ImmediateMesh::surface_end() {
 	surface_active = false;
 
 	emit_changed();
-#ifdef TOOLS_ENABLED
-	emit_signal("_mesh_materials_updated");
-#endif // TOOLS_ENABLED
+	_notify_mesh_materials_updated();
 }
 
 void ImmediateMesh::clear_surfaces() {
 	RS::get_singleton()->mesh_clear(mesh);
+	for (const Surface &surface : surfaces) {
+		if (surface.material.is_valid() && surface.material->is_connected(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ImmediateMesh::_notify_mesh_materials_updated))) {
+			surface.material->disconnect(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ImmediateMesh::_notify_mesh_materials_updated));
+		}
+	}
 	surfaces.clear();
 	surface_active = false;
 
@@ -373,15 +380,31 @@ Mesh::PrimitiveType ImmediateMesh::surface_get_primitive_type(int p_idx) const {
 }
 void ImmediateMesh::surface_set_material(int p_idx, const Ref<Material> &p_material) {
 	ERR_FAIL_INDEX(p_idx, int(surfaces.size()));
+	Ref<Material> old_material = surfaces[p_idx].material;
 	surfaces[p_idx].material = p_material;
+
+	if (old_material.is_valid()) {
+		bool surfaces_still_have_old_material = false;
+		for (const Surface &surface : surfaces) {
+			if (surface.material == old_material) {
+				surfaces_still_have_old_material = true;
+				break;
+			}
+		}
+		if (!surfaces_still_have_old_material) {
+			old_material->disconnect(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ImmediateMesh::_notify_mesh_materials_updated));
+		}
+	}
+
 	RID mat;
 	if (p_material.is_valid()) {
 		mat = p_material->get_rid();
+		if (!p_material->is_connected(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ImmediateMesh::_notify_mesh_materials_updated))) {
+			p_material->connect(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ImmediateMesh::_notify_mesh_materials_updated));
+		}
 	}
 	RS::get_singleton()->mesh_surface_set_material(mesh, p_idx, mat);
-#ifdef TOOLS_ENABLED
-	emit_signal("_mesh_materials_updated");
-#endif // TOOLS_ENABLED
+	_notify_mesh_materials_updated();
 }
 Ref<Material> ImmediateMesh::surface_get_material(int p_idx) const {
 	ERR_FAIL_INDEX_V(p_idx, int(surfaces.size()), Ref<Material>());

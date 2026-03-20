@@ -124,9 +124,7 @@ void MeshInstance3D::set_mesh(const Ref<Mesh> &p_mesh) {
 
 	if (mesh.is_valid()) {
 		mesh->disconnect_changed(callable_mp(this, &MeshInstance3D::_mesh_changed));
-#ifdef TOOLS_ENABLED
-		mesh->disconnect("_mesh_materials_updated", callable_mp(this, &MeshInstance3D::_update_assigned_surface_materials));
-#endif // TOOLS_ENABLED
+		mesh->disconnect("_mesh_materials_updated", callable_mp(this, &MeshInstance3D::_notify_material_property_list_changed));
 	}
 
 	mesh = p_mesh;
@@ -137,9 +135,7 @@ void MeshInstance3D::set_mesh(const Ref<Mesh> &p_mesh) {
 		set_base(mesh->get_rid());
 		mesh->connect_changed(callable_mp(this, &MeshInstance3D::_mesh_changed));
 		_mesh_changed();
-#ifdef TOOLS_ENABLED
-		mesh->connect("_mesh_materials_updated", callable_mp(this, &MeshInstance3D::_update_assigned_surface_materials));
-#endif //TOOLS_ENABLED
+		mesh->connect("_mesh_materials_updated", callable_mp(this, &MeshInstance3D::_notify_material_property_list_changed));
 	} else {
 		blend_shape_tracks.clear();
 		blend_shape_properties.clear();
@@ -149,9 +145,6 @@ void MeshInstance3D::set_mesh(const Ref<Mesh> &p_mesh) {
 
 	notify_property_list_changed();
 	update_configuration_warnings();
-#ifdef TOOLS_ENABLED
-	_update_assigned_surface_materials();
-#endif
 }
 
 Ref<Mesh> MeshInstance3D::get_mesh() const {
@@ -384,17 +377,22 @@ int MeshInstance3D::get_surface_override_material_count() const {
 void MeshInstance3D::set_surface_override_material(int p_surface, const Ref<Material> &p_material) {
 	ERR_FAIL_INDEX(p_surface, surface_override_materials.size());
 
+	Ref<Material> old_material = surface_override_materials[p_surface];
 	surface_override_materials.write[p_surface] = p_material;
+	if (old_material.is_valid() && !surface_override_materials.has(old_material)) {
+		old_material->disconnect(CoreStringName(property_list_changed), callable_mp(this, &MeshInstance3D::_notify_material_property_list_changed));
+	}
 
-	if (surface_override_materials[p_surface].is_valid()) {
-		RS::get_singleton()->instance_set_surface_override_material(get_instance(), p_surface, surface_override_materials[p_surface]->get_rid());
+	if (p_material.is_valid()) {
+		RS::get_singleton()->instance_set_surface_override_material(get_instance(), p_surface, p_material->get_rid());
+		if (!p_material->is_connected(CoreStringName(property_list_changed), callable_mp(this, &MeshInstance3D::_notify_material_property_list_changed))) {
+			p_material->connect(CoreStringName(property_list_changed), callable_mp(this, &MeshInstance3D::_notify_material_property_list_changed));
+		}
 	} else {
 		RS::get_singleton()->instance_set_surface_override_material(get_instance(), p_surface, RID());
 	}
 
-#ifdef TOOLS_ENABLED
-	_update_assigned_surface_materials();
-#endif // TOOLS_ENABLED
+	_notify_material_property_list_changed();
 }
 
 Ref<Material> MeshInstance3D::get_surface_override_material(int p_surface) const {
@@ -422,40 +420,9 @@ Ref<Material> MeshInstance3D::get_active_material(int p_surface) const {
 	return m->surface_get_material(p_surface);
 }
 
-#ifdef TOOLS_ENABLED
-void MeshInstance3D::_update_assigned_surface_materials() {
-	for (const Ref<Material> &mat : assigned_surface_materials) {
-		mat->disconnect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
-	}
-
-	assigned_surface_materials.clear();
-
-	if (mesh.is_valid()) {
-		const int surface_count = mesh->get_surface_count();
-		ERR_FAIL_COND(surface_count < 0);
-
-		for (int surface_index = 0; surface_index < surface_count; ++surface_index) {
-			const Ref<Material> &override_material = surface_override_materials[surface_index];
-			if (override_material.is_valid()) {
-				if (!assigned_surface_materials.has(override_material)) {
-					assigned_surface_materials.push_back(override_material);
-				}
-			} else {
-				const Ref<Material> &mesh_material = mesh->surface_get_material(surface_index);
-				if (mesh_material.is_valid() && !assigned_surface_materials.has(mesh_material)) {
-					assigned_surface_materials.push_back(mesh_material);
-				}
-			}
-		}
-
-		for (const Ref<Material> &mat : assigned_surface_materials) {
-			mat->connect(CoreStringName(property_list_changed), callable_mp((Object *)this, &Object::notify_property_list_changed));
-		}
-	}
-
-	notify_property_list_changed();
+void MeshInstance3D::_notify_material_property_list_changed() {
+	emit_signal(CoreStringName(property_list_changed));
 }
-#endif //TOOLS_ENABLED
 
 void MeshInstance3D::_mesh_changed() {
 	ERR_FAIL_COND(mesh.is_null());

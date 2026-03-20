@@ -145,11 +145,7 @@ private:
 	bool ignore_occlusion_culling = false;
 
 	const StringName *_instance_uniform_get_remap(const StringName &p_name) const;
-
-#ifdef TOOLS_ENABLED
-	void _update_assigned_materials();
-	LocalVector<Ref<Material>> assigned_materials;
-#endif // TOOLS_ENABLED
+	void _notify_material_property_list_changed();
 
 protected:
 	bool _set(const StringName &p_name, const Variant &p_value);

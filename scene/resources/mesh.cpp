@@ -31,6 +31,7 @@
 #include "mesh.h"
 
 #include "core/math/convex_hull.h"
+#include "core/object/callable_mp.h"
 #include "core/object/class_db.h"
 #include "core/templates/pair.h"
 #include "scene/resources/surface_tool.h"
@@ -257,9 +258,6 @@ Mesh::PrimitiveType Mesh::surface_get_primitive_type(int p_idx) const {
 
 void Mesh::surface_set_material(int p_idx, const Ref<Material> &p_material) {
 	GDVIRTUAL_CALL(_surface_set_material, p_idx, p_material);
-#ifdef TOOLS_ENABLED
-	emit_signal("_mesh_materials_updated");
-#endif // TOOLS_ENABLED
 }
 
 Ref<Material> Mesh::surface_get_material(int p_idx) const {
@@ -522,6 +520,10 @@ void Mesh::generate_debug_mesh_indices(Vector<Vector3> &r_points) {
 
 Vector<Vector3> Mesh::_get_faces() const {
 	return Variant(get_faces());
+}
+
+void Mesh::_notify_mesh_materials_updated() {
+	emit_signal("_mesh_materials_updated");
 }
 
 Vector<Face3> Mesh::get_faces() const {
@@ -967,9 +969,7 @@ Transform3D Mesh::get_builtin_bind_pose(int p_index) const {
 }
 
 Mesh::Mesh() {
-#ifdef TOOLS_ENABLED
 	add_user_signal(MethodInfo("_mesh_materials_updated"));
-#endif // TOOLS_ENABLED
 }
 
 enum OldArrayType {
@@ -1698,6 +1698,11 @@ void ArrayMesh::_set_surfaces(const Array &p_surfaces) {
 		RS::get_singleton()->mesh_set_path(mesh, get_path());
 	}
 
+	for (const Surface &old_surface : surfaces) {
+		if (old_surface.material.is_valid() && old_surface.material->is_connected(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ArrayMesh::_notify_mesh_materials_updated))) {
+			old_surface.material->disconnect(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ArrayMesh::_notify_mesh_materials_updated));
+		}
+	}
 	surfaces.clear();
 	clear_cache();
 
@@ -1721,6 +1726,10 @@ void ArrayMesh::_set_surfaces(const Array &p_surfaces) {
 		s.index_array_length = surface_data[i].index_count;
 
 		surfaces.push_back(s);
+
+		if (s.material.is_valid() && !s.material->is_connected(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ArrayMesh::_notify_mesh_materials_updated))) {
+			s.material->connect(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ArrayMesh::_notify_mesh_materials_updated));
+		}
 	}
 }
 
@@ -1955,13 +1964,29 @@ void ArrayMesh::surface_set_material(int p_idx, const Ref<Material> &p_material)
 	if (surfaces[p_idx].material == p_material) {
 		return;
 	}
+	Ref<Material> old_material = surfaces[p_idx].material;
 	surfaces.write[p_idx].material = p_material;
+
+	if (old_material.is_valid()) {
+		bool surfaces_still_have_old_material = false;
+		for (const Surface &surface : surfaces) {
+			if (surface.material == old_material) {
+				surfaces_still_have_old_material = true;
+				break;
+			}
+		}
+		if (!surfaces_still_have_old_material) {
+			old_material->disconnect(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ArrayMesh::_notify_mesh_materials_updated));
+		}
+	}
+
+	if (p_material.is_valid() && !p_material->is_connected(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ArrayMesh::_notify_mesh_materials_updated))) {
+		p_material->connect(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ArrayMesh::_notify_mesh_materials_updated));
+	}
 	RenderingServer::get_singleton()->mesh_surface_set_material(mesh, p_idx, p_material.is_null() ? RID() : p_material->get_rid());
 
 	emit_changed();
-#ifdef TOOLS_ENABLED
-	emit_signal("_mesh_materials_updated");
-#endif // TOOLS_ENABLED
+	_notify_mesh_materials_updated();
 }
 
 int ArrayMesh::surface_find_by_name(const String &p_name) const {
@@ -2027,6 +2052,11 @@ AABB ArrayMesh::get_aabb() const {
 void ArrayMesh::clear_surfaces() {
 	if (!mesh.is_valid()) {
 		return;
+	}
+	for (const Surface &surface : surfaces) {
+		if (surface.material.is_valid() && surface.material->is_connected(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ArrayMesh::_notify_mesh_materials_updated))) {
+			surface.material->disconnect(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ArrayMesh::_notify_mesh_materials_updated));
+		}
 	}
 	RS::get_singleton()->mesh_clear(mesh);
 	surfaces.clear();
@@ -2355,6 +2385,11 @@ void ArrayMesh::_bind_methods() {
 
 void ArrayMesh::reload_from_file() {
 	RenderingServer::get_singleton()->mesh_clear(mesh);
+	for (const Surface &surface : surfaces) {
+		if (surface.material.is_valid() && surface.material->is_connected(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ArrayMesh::_notify_mesh_materials_updated))) {
+			surface.material->disconnect(CoreStringName(property_list_changed), callable_mp((Mesh *)this, &ArrayMesh::_notify_mesh_materials_updated));
+		}
+	}
 	surfaces.clear();
 	clear_blend_shapes();
 	clear_cache();
